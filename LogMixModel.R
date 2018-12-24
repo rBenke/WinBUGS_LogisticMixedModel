@@ -18,16 +18,14 @@ library(plotly)
 ggplotly(ggplot(data[IDgroup %in% base::sample(1:500,40)],aes(x=time,y=bin_score,group= IDgroup,color= as.factor(IDgroup)))+geom_line())
 # Logistic model (not Bayesian!)
 library(lme4)
-results <- glmer(bin_score~(1|IDgroup)+(time|IDgroup),data = data,family = binomial(),control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
-results
-plot(results) #AIC = 1629
 
-results2 <- glm(bin_score~as.factor(IDgroup)+time*as.factor(IDgroup),data = data, family = binomial())
-results2
-plot(results2) #AIC = 1413 
-
+#--------------------------------------------------------
+#--  just fixed parameters to check if its working   ----
+#--------------------------------------------------------
+results <- glm(bin_score~time,data = data, family = binomial())
+results # AIC = 2759.984
+plot(results) 
 #Bayesian
-library(R2OpenBUGS)
 library(R2WinBUGS)
 
 sink("model.txt")        
@@ -36,36 +34,96 @@ cat("model FIRST
   # N observations
   for (i in 1:N) {
     bin_score[i] ~ dbern(p[i])
-    logit(p[i]) <- b0[group[i]] + b1[group[i]]*time[i]
+    logit(p[i]) <- b0 + b1*time[i]
   }
-  # Nsubj groups
-  for (j in 1:Nsubj) {
-    b0[j] ~ dnorm(0,1000)
-    b1[j] ~ dnorm(0,1000)
-  }
+    b0 ~ dnorm(0,0.01)
+    b1 ~ dnorm(0,0.01)
  }", fill = TRUE)
   sink()
 
   bin_score <- data$bin_score 
   time <- data$time
-  group <- data$IDgroup
-  Nsubj = length(unique(data$IDgroup))
   N = length(bin_score)
   
-  dataList = list("time","bin_score","group","Nsubj","N")
+  dataList = list("time","bin_score","N")
   params = c("b0","b1")
   
   inits <- function(){
-     list(b0 = rnorm(Nsubj,0,11),b1 = rnorm(Nsubj,0,0.1))
+     list(b0 = rnorm(1,0,1),b1 = rnorm(1,0,1))
      }
   
   
   nc <- 3    #number of MCMC chains to run
-  ni <- 10000  #number of samples for each chain     
-  nb <- 5000   #number of samples to discard as burn-in
+  ni <- 6000  #number of samples for each chain     
+  nb <- 3000   #number of samples to discard as burn-in
   nt <- 1      #thinning rate, increase this to reduce autocorrelation
   
-  bugs.out <-R2WinBUGS::bugs(data=dataList,inits=NULL, parameters.to.save=params, model.file="model.txt", 
+  bugs.out <-R2WinBUGS::bugs(data=dataList,inits=inits, parameters.to.save=params, model.file="model.txt", 
                    n.chains=nc, n.iter=ni, n.burnin=nb, n.thin=nt, debug=TRUE, DIC=TRUE,
                    bugs.directory = "F:\\WinBUGS14", working.directory=getwd())
- 
+  print(bugs.out, digits = 3)
+  bugs.out$summary
+  bugs.out$DIC #5750.64
+  
+  plot(bugs.out) # gives a summary plot of coefficients and credible intervals
+  #mcmcplot(bugs.out) can not find this function ;/
+  
+  #------------------------------------------------------------
+  #--  just ranodm effects, 500 group => 1000 parameters   ----
+  #--          b0 and b1 normal, uncorrelated              ----
+  #------------------------------------------------------------
+  
+  results2 <- glm(bin_score~as.factor(IDgroup)+time*as.factor(IDgroup),data = data, family = binomial())
+  results2
+  plot(results2) #AIC = 2501 
+  
+  
+  sink("model2.txt")        
+  cat("model FIRST
+      {
+      # N observations
+      for (i in 1:N) {
+      bin_score[i] ~ dbern(p[i])
+      logit(p[i]) <- b0[group[i]] + b1[group[i]]*time[i]
+      }
+      for (k in 1:K) {
+      b0[k] ~ dnorm(0,0.1)
+      b1[k] ~ dnorm(0,0.1)
+      }
+
+      }", fill = TRUE)
+  sink()
+  
+  bin_score <- data$bin_score 
+  time <- data$time
+  group <- data$IDgroup
+  K = data$IDgroup %>% unique() %>% length()
+  N = length(bin_score)
+  
+  dataList = list("time","bin_score","group","K","N")
+  params = c("b0","b1")
+  
+  inits <- function(){
+   list(b0 = rnorm(500,0,1),b1 = rnorm(500,0,1))
+  }
+  
+  
+  nc <- 2    #number of MCMC chains to run
+  ni <- 6000  #number of samples for each chain     
+  nb <- 3000   #number of samples to discard as burn-in
+  nt <- 1      #thinning rate, increase this to reduce autocorrelation
+  
+  bugs.out2 <-R2WinBUGS::bugs(data=dataList,inits=inits, parameters.to.save=params, model.file="model2.txt", 
+                             n.chains=nc, n.iter=ni, n.burnin=nb, n.thin=nt, debug=TRUE, DIC=TRUE,
+                             bugs.directory = "F:\\WinBUGS14", working.directory=getwd())
+  print(bugs.out2, digits = 3)
+  bugs.out2$summary
+  bugs.out2$DIC #2361.07
+  
+  plot(bugs.out2)
+  
+  
+  #------------------------------------------------------------
+  #--  just ranodm effects, 500 group => 1000 parameters   ----
+  #--           b0 and b1 normal, correleted               ----
+  #------------------------------------------------------------
