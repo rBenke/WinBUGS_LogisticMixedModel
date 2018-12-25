@@ -22,11 +22,15 @@ library(lme4)
 #--------------------------------------------------------
 #--  just fixed parameters to check if its working   ----
 #--------------------------------------------------------
+
+#classical
 results <- glm(bin_score~time,data = data, family = binomial())
 results # AIC = 2759.984
 plot(results) 
+
 #Bayesian
 library(R2WinBUGS)
+library(mcmcplots)
 
 sink("model.txt")        
 cat("model FIRST
@@ -73,11 +77,11 @@ cat("model FIRST
   #--          b0 and b1 normal, uncorrelated              ----
   #------------------------------------------------------------
   
+  #classical
   results2 <- glm(bin_score~as.factor(IDgroup)+time*as.factor(IDgroup),data = data, family = binomial())
-  results2
-  plot(results2) #AIC = 2501 
+  results2  #AIC = 2501 
   
-  
+  #Bayesian  
   sink("model2.txt")        
   cat("model FIRST
       {
